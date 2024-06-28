@@ -1,4 +1,6 @@
 #include "../include/shader.h"
+#include "glm-1.0.1-light/glm/ext/matrix_float4x4.hpp"
+#include "glm-1.0.1-light/glm/gtc/type_ptr.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -87,4 +89,8 @@ void Shader::SetInt(const std::string &name, int value) const {
 }
 void Shader::SetFloat(const std::string &name, float value) const {
   glUniform1f(glGetUniformLocation(Id, name.c_str()), value);
+}
+void Shader::setMat4(const std::string &name, glm::mat4 value) const {
+  glUniformMatrix4fv(glGetUniformLocation(Id, name.c_str()), 1, GL_FALSE,
+                     glm::value_ptr(value));
 }
