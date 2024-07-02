@@ -1,237 +1,210 @@
 #include "../include/glad/glad/glad.h"
-#include "../include/shader.h"
-#include "glm-1.0.1-light/glm/ext/matrix_clip_space.hpp"
+#include "../include/stb_image.h"
 #include "glm-1.0.1-light/glm/ext/matrix_float4x4.hpp"
 #include "glm-1.0.1-light/glm/ext/matrix_transform.hpp"
 #include "glm-1.0.1-light/glm/ext/vector_float3.hpp"
-#include "glm-1.0.1-light/glm/fwd.hpp"
-#include "glm-1.0.1-light/glm/geometric.hpp"
 #include "glm-1.0.1-light/glm/trigonometric.hpp"
 #include <GLFW/glfw3.h>
-#include <iostream>
-#include <math.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include <glm-1.0.1-light/glm/glm.hpp>
-#include <glm-1.0.1-light/glm/gtc/matrix_transform.hpp>
-#include <glm-1.0.1-light/glm/gtc/type_ptr.hpp>
 
-// Function definition
-void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
-  glViewport(0, 0, width, height);
-}
+#include "../include/glm-1.0.1-light/glm/glm.hpp"
+#include "../include/glm-1.0.1-light/glm/gtc/matrix_transform.hpp"
+#include "../include/glm-1.0.1-light/glm/gtc/type_ptr.hpp"
 
-// Store the camera position + front vector + up vector as global value
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
-// Store the camera direction as global value, allow camera rotation with mouse
-glm::vec3 camerDirection;
-// Cursor related global variables
-float lastX = 400, lastY = 300;
-float pitch = 0.0f, yaw = -90.0f;
+#include "../include/camera.h"
+#include "../include/shader.h"
+
+#include <iostream>
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height);
+void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void processInput(GLFWwindow *window);
+
+// settings
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+// camera
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+float lastX = SCR_WIDTH / 2.0f;
+float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
-float zoom = 45.0f;
 
-void mouse_callback(GLFWwindow *window, double posX, double posY) {
-  if (firstMouse) {
-    lastX = posX;
-    lastY = posY;
-    firstMouse = false;
-  }
-  float xOffset = posX - lastX;
-  float yOffset = lastY - posY;
-  lastX = posX;
-  lastY = posY;
-  const float sensitivity = 0.05f;
-  xOffset *= sensitivity;
-  yOffset *= sensitivity;
-  yaw += xOffset;
-  pitch += yOffset;
+// timing
+float deltaTime = 0.0f; // time between current frame and last frame
+float lastFrame = 0.0f;
 
-  // Camera pitch needs to be constraints between -90 to 90 degree
-  if (pitch > 89.0f)
-    pitch = 89.0f;
-  if (pitch < -89.0f)
-    pitch = -89.0f;
-  glm::vec3 direction;
-  direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-  direction.y = sin(glm::radians(pitch));
-  direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-  cameraFront = glm::normalize(direction);
-}
-
-void scroll_callback(GLFWwindow *window, double xOffset, double yOffset) {
-  zoom -= (float)yOffset;
-  if (zoom < 1.0f)
-    zoom = 1.0f;
-  if (zoom > 45.0f)
-    zoom = 45.0f;
-}
-// Process input called every frame, use GLFW to determine if there are any
-// input from the user when the new frame loads
-void processInput(GLFWwindow *window) {
-  const float cameraSpeed = 2.5f * deltaTime;
-  // If escape key is pressed, set windows should be closed to true
-  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-    glfwSetWindowShouldClose(window, true);
-  else if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-    cameraPos += cameraSpeed * cameraFront;
-  else if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-    cameraPos -= cameraSpeed * cameraFront;
-  else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-    cameraPos -=
-        glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-  else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-    cameraPos +=
-        glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-}
-
-// Trying out making custom lookat functions
-glm::mat4 customLookAt(glm::vec3 cameraPosition, glm::vec3 cameraLookLocation,
-                       glm::vec3 worldUp) {
-  glm::mat4 lookAtMatrix = glm::mat4(1.0f);
-  glm::vec3 cameraDirection =
-      glm::normalize(cameraPosition - cameraLookLocation);
-  glm::vec3 rightAxis = glm::normalize(glm::cross(worldUp, cameraDirection));
-  glm::vec3 upAxis = glm::normalize(glm::cross(cameraDirection, rightAxis));
-  lookAtMatrix =
-      glm::mat4(glm::vec4(rightAxis.x, upAxis.x, cameraDirection.x, 0.0f),
-                glm::vec4(rightAxis.y, upAxis.y, cameraDirection.y, 0.0f),
-                glm::vec4(rightAxis.z, upAxis.z, cameraDirection.z, 0.0f),
-                glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)) *
-      glm::mat4(glm::vec4(1.0f, 0.0f, 0.0f, 0.0f),
-                glm::vec4(0.0f, 1.0f, 0.0f, 0.0f),
-                glm::vec4(0.0f, 0.0f, 1.0f, 0.0f),
-                glm::vec4(-(cameraPosition.x), -(cameraPosition.y),
-                          -(cameraPosition.z), 1.0f));
-  return lookAtMatrix;
-}
-
-float vertices[] = {
-    -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 0.0f,
-    0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
-    -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
-
-    -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
-    0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-    -0.5f, 0.5f,  0.5f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f,
-
-    -0.5f, 0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 1.0f, 1.0f,
-    -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-    -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  1.0f, 0.0f,
-
-    0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
-    0.5f,  -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f, 1.0f,
-    0.5f,  -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-    -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 1.0f,
-    0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
-    -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-
-    -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
-    0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-    -0.5f, 0.5f,  0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f};
-
-glm::vec3 cubePositions[] = {
-    glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
-    glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
-    glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
-    glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
-    glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
-
-int main(int argc, char *argv[]) {
-  // Initialize GLFW
-  if (!glfwInit()) {
-    std::cout << "Failed to initialize GLFW" << std::endl;
-    return -1;
-  }
-  // Configurate GLFW, set the openGL version to be 3.3
+int main() {
+  // glfw: initialize and configure
+  // ------------------------------
+  glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  // Set OpenGL to only use core profile, avoids any legacy features
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-  // Create a GLFW window
+#ifdef __APPLE__
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
+  // glfw window creation
+  // --------------------
   GLFWwindow *window =
-      glfwCreateWindow(800, 600, "LearnOpenGL", nullptr, nullptr);
-  if (window == nullptr) {
-    std::cout << "Failed to create OpenGL window" << std::endl;
+      glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+  if (window == NULL) {
+    std::cout << "Failed to create GLFW window" << std::endl;
     glfwTerminate();
     return -1;
   }
-  // Make the newly created window the current context
   glfwMakeContextCurrent(window);
+  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+  glfwSetCursorPosCallback(window, mouse_callback);
+  glfwSetScrollCallback(window, scroll_callback);
 
-  // Initialize GLAD
+  // tell GLFW to capture our mouse
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+  // glad: load all OpenGL function pointers
+  // ---------------------------------------
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
 
-  // Set the viewport
-  glViewport(0, 0, 800, 600);
+  // configure global opengl state
+  // -----------------------------
+  glEnable(GL_DEPTH_TEST);
 
-  // Set the framebuffer size callback
-  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-  glfwSetCursorPosCallback(window, mouse_callback);
-  glfwSetScrollCallback(window, scroll_callback);
+  // build and compile our shader zprogram
+  // ------------------------------------
+  Shader objectShader("../shader/camera.vs", "../shader/camera.fs");
+  Shader lightSourceShader("../shader/light.vs", "../shader/light.fs");
 
-  // Create a model matrix
-  glm::mat4 model = glm::mat4(1.0f);
-  // This will help with transforming vertex to world coordinates
-  // Create a view matrix, move the camera backward to moving the scene forward
-  glm::mat4 view = glm::mat4(1.0f);
-  view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-  // Last, create the projection matrix
-  glm::mat4 projection;
+  // set up vertex data (and buffer(s)) and configure vertex attributes
+  // ------------------------------------------------------------------
+  float vertices[] = {
+      // positions          // normals           // texture coords
+      -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0.5f,  -0.5f,
+      -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f,  0.0f,  0.5f,  0.5f,  -0.5f, 0.0f,
+      0.0f,  -1.0f, 1.0f,  1.0f,  0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f,
+      1.0f,  1.0f,  -0.5f, 0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f,  1.0f,
+      -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,
 
-  // Create a buffer object with ID
-  unsigned int VBO;
+      -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  0.0f,  0.5f,  -0.5f,
+      0.5f,  0.0f,  0.0f,  1.0f,  1.0f,  0.0f,  0.5f,  0.5f,  0.5f,  0.0f,
+      0.0f,  1.0f,  1.0f,  1.0f,  0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+      1.0f,  1.0f,  -0.5f, 0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  1.0f,
+      -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  0.0f,
+
+      -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f,  0.0f,  -0.5f, 0.5f,
+      -0.5f, -1.0f, 0.0f,  0.0f,  1.0f,  1.0f,  -0.5f, -0.5f, -0.5f, -1.0f,
+      0.0f,  0.0f,  0.0f,  1.0f,  -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,
+      0.0f,  1.0f,  -0.5f, -0.5f, 0.5f,  -1.0f, 0.0f,  0.0f,  0.0f,  0.0f,
+      -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f,  0.0f,
+
+      0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f,  0.0f,  0.5f,  0.5f,
+      -0.5f, 1.0f,  0.0f,  0.0f,  1.0f,  1.0f,  0.5f,  -0.5f, -0.5f, 1.0f,
+      0.0f,  0.0f,  0.0f,  1.0f,  0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,
+      0.0f,  1.0f,  0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+      0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f,  0.0f,
+
+      -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f,  1.0f,  0.5f,  -0.5f,
+      -0.5f, 0.0f,  -1.0f, 0.0f,  1.0f,  1.0f,  0.5f,  -0.5f, 0.5f,  0.0f,
+      -1.0f, 0.0f,  1.0f,  0.0f,  0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,
+      1.0f,  0.0f,  -0.5f, -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  0.0f,  0.0f,
+      -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f,  1.0f,
+
+      -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f,  1.0f,  0.5f,  0.5f,
+      -0.5f, 0.0f,  1.0f,  0.0f,  1.0f,  1.0f,  0.5f,  0.5f,  0.5f,  0.0f,
+      1.0f,  0.0f,  1.0f,  0.0f,  0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+      1.0f,  0.0f,  -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  0.0f,
+      -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f,  1.0f};
+  // world space positions of our cubes
+  glm::vec3 cubePositions[] = {
+      glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
+      glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
+      glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
+      glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
+      glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
+  // Define the location of all the point lights
+  glm::vec3 pointLightPositions[] = {
+      glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
+      glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
+
+  unsigned int VBO, VAO, lightVAO;
+  glGenVertexArrays(1, &VAO);
+  glGenVertexArrays(1, &lightVAO);
   glGenBuffers(1, &VBO);
-  // Creae a shader program to combine all the shaders together
 
-  // Create a EBO with ID
-  unsigned int EBO;
-  glGenBuffers(1, &EBO);
+  // Bind configuration to VAO
+  glBindVertexArray(VAO);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-  // Create a texture with id
-  unsigned int texture;
-  glGenTextures(1, &texture);
-  // Bound the texture to type of a 2D texture
-  glBindTexture(GL_TEXTURE_2D, texture);
-  // Set texture wrapping
+  // position attribute
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  // Normal vector attribute
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
+                        (void *)(6 * sizeof(float)));
+  glEnableVertexAttribArray(2);
+
+  // Bind configuration to lightVAO
+  glBindVertexArray(lightVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+  // position attribute
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  // load and create a texture
+  // -------------------------
+  unsigned int diffuseMap, specularMap, emissionMap;
+  // texture 1
+  // ---------
+  glGenTextures(1, &diffuseMap);
+  glBindTexture(GL_TEXTURE_2D, diffuseMap);
+  // set the texture wrapping parameters
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  // Set texture filtering method
+  // set texture filtering parameters
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  // Use stb_image library to load the texture from image
-  int width, height, nrChannel;
-  unsigned char *data = stbi_load("../resource/img/container.jpg", &width,
-                                  &height, &nrChannel, 0);
+  // load image, create texture and generate mipmaps
+  int width, height, nrChannels;
+  stbi_set_flip_vertically_on_load(
+      true); // tell stb_image.h to flip loaded texture's on the y-axis.
+  unsigned char *data = stbi_load("../resource/img/container2.png", &width,
+                                  &height, &nrChannels, 0);
   if (data) {
-    // Generate texture using the loaded texture data
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA,
                  GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
   } else {
     std::cout << "Failed to load texture" << std::endl;
   }
   stbi_image_free(data);
-
-  unsigned int texture2;
-  glGenTextures(1, &texture2);
-  glBindTexture(GL_TEXTURE_2D, texture2);
-
-  stbi_set_flip_vertically_on_load(true);
-  data = stbi_load("../resource/img/awesomeface.png", &width, &height,
-                   &nrChannel, 0);
+  // texture 2
+  // ---------
+  glGenTextures(1, &specularMap);
+  glBindTexture(GL_TEXTURE_2D, specularMap);
+  // set the texture wrapping parameters
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  // set texture filtering parameters
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  // load image, create texture and generate mipmaps
+  data = stbi_load("../resource/img/container2_specular.png", &width, &height,
+                   &nrChannels, 0);
   if (data) {
-    // Generate texture using the loaded texture data
+    // note that the awesomeface.png has transparency and thus an alpha channel,
+    // so make sure to tell OpenGL the data type is of GL_RGBA
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA,
                  GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
@@ -240,110 +213,235 @@ int main(int argc, char *argv[]) {
   }
   stbi_image_free(data);
 
-  // Create a vertex array object
-  unsigned int VAO;
-  glGenVertexArrays(1, &VAO);
-  // Bind vertex array object
-  glBindVertexArray(VAO);
-  // Specify the types of the buffer object to be an array buffer object
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  // copy the vertices into the array buffer
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  glGenTextures(1, &emissionMap);
+  glBindTexture(GL_TEXTURE_2D, emissionMap);
+  // set the texture wrapping parameters
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  // set texture filtering parameters
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  data =
+      stbi_load("../resource/img/matrix.jpg", &width, &height, &nrChannels, 0);
+  if (data) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+                 GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+  } else {
+    std::cout << "Failed to load texture" << std::endl;
+  }
+  stbi_image_free(data);
 
-  // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  // glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-  //             GL_STATIC_DRAW);
+  // tell opengl for each sampler to which texture unit it belongs to (only has
+  // to be done once)
+  // -------------------------------------------------------------------------------------------
+  objectShader.use();
+  objectShader.SetVec3("objectColor", glm::vec3(1.0f, 0.5f, 0.31f));
+  objectShader.SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
-  // Read vertex position data and pass it to the shader through
-  // location 0
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
-  glEnableVertexAttribArray(0);
+  // Set material values for the fragment shader
+  objectShader.SetVec3("material.ambient", glm::vec3(1.0f, 0.5f, 0.31f));
+  objectShader.SetInt("material.diffuse", 0);
+  objectShader.SetInt("material.specular", 1);
+  objectShader.SetInt("material.emission", 2);
+  objectShader.SetVec3("material.specular", glm::vec3(0.5f, 0.5f, 0.5f));
+  objectShader.SetFloat("material.shininess", 32.0f);
 
-  // Read vertex texture data + pass it to the shader through
-  // location 2
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                        (void *)(3 * sizeof(float)));
-  glEnableVertexAttribArray(1);
-  // Draw int wireframe mode
-  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  // enable depth test using the Z-buffer
-  glEnable(GL_DEPTH_TEST);
-  // Set up the input mode to capture mouse, and disable the mouse cursor to
-  // show
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  objectShader.SetVec3("directLight.specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetVec3("spotLight.specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetVec3("directLight.direction", glm::vec3(-0.23, -1.0f, -0.3f));
+  // Set up the point light drop of formula, setting up the point light distance
+  // to be 50
 
-  // Use the shader constructor to import and compile vertex +
-  // fragment vertexShader
-  Shader ourShader("../shader/shader.vs", "../shader/shader.fs");
-
-  ourShader.use();
-  ourShader.SetInt("texture1", 0);
-  ourShader.SetInt("texture2", 1);
-  // This is the render loop, keep running until window closed is
-  // called
+  objectShader.SetVec3("pointLights[0].position", pointLightPositions[0]);
+  objectShader.SetVec3("pointLights[0].ambient",
+                       glm::vec3(0.05f, 0.05f, 0.05f));
+  objectShader.SetVec3("pointLights[0].diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
+  objectShader.SetVec3("pointLights[0].specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetFloat("pointLights[0].constant", 1.0f);
+  objectShader.SetFloat("pointLights[0].linear", 0.09f);
+  objectShader.SetFloat("pointLights[0].quadratic", 0.032f);
+  // point light 2
+  objectShader.SetVec3("pointLights[1].position", pointLightPositions[1]);
+  objectShader.SetVec3("pointLights[1].ambient",
+                       glm::vec3(0.05f, 0.05f, 0.05f));
+  objectShader.SetVec3("pointLights[1].diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
+  objectShader.SetVec3("pointLights[1].specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetFloat("pointLights[1].constant", 1.0f);
+  objectShader.SetFloat("pointLights[1].linear", 0.09f);
+  objectShader.SetFloat("pointLights[1].quadratic", 0.032f);
+  // point light 3
+  objectShader.SetVec3("pointLights[2].position", pointLightPositions[2]);
+  objectShader.SetVec3("pointLights[2].ambient",
+                       glm::vec3(0.05f, 0.05f, 0.05f));
+  objectShader.SetVec3("pointLights[2].diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
+  objectShader.SetVec3("pointLights[2].specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetFloat("pointLights[2].constant", 1.0f);
+  objectShader.SetFloat("pointLights[2].linear", 0.09f);
+  objectShader.SetFloat("pointLights[2].quadratic", 0.032f);
+  // point light 4
+  objectShader.SetVec3("pointLights[3].position", pointLightPositions[3]);
+  objectShader.SetVec3("pointLights[3].ambient",
+                       glm::vec3(0.05f, 0.05f, 0.05f));
+  objectShader.SetVec3("pointLights[3].diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
+  objectShader.SetVec3("pointLights[3].specular", glm::vec3(1.0f, 1.0f, 1.0f));
+  objectShader.SetFloat("pointLights[3].constant", 1.0f);
+  objectShader.SetFloat("pointLights[3].linear", 0.09f);
+  objectShader.SetFloat("pointLights[3].quadratic", 0.032f);
+  // Change light color over time
+  glm::vec3 diffuseColor = glm::vec3(0.5f);
+  glm::vec3 ambientColor = glm::vec3(0.2f);
+  objectShader.SetVec3("directLight.ambient", ambientColor);
+  objectShader.SetVec3("pointLight.ambient", ambientColor);
+  objectShader.SetVec3("spotLight.ambient", ambientColor);
+  objectShader.SetVec3("directLight.diffuse", diffuseColor);
+  objectShader.SetVec3("pointLight.diffuse", diffuseColor);
+  objectShader.SetVec3("spotLight.diffuse", diffuseColor);
+  // render loop
+  // -----------
   while (!glfwWindowShouldClose(window)) {
-    // Swap the color buffer + show output
-    processInput(window);
-    // Specify the color used for clear
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-    // Actually clear the color buffer, fill the buffer with the
-    // color set earlier
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    // Use the shader program to draw
-    int modelLoc = glGetUniformLocation(ourShader.Id, "model");
-
-    const float radius = 10.0f;
-    // Change the camera location base on Sin and Cos
-    float camX = sin(glfwGetTime()) * radius;
-    float camZ = cos(glfwGetTime()) * radius;
-    cameraPos.y = 0.0f;
-    view = customLookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
-    modelLoc = glGetUniformLocation(ourShader.Id, "view");
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(view));
-
-    projection =
-        glm::perspective(glm::radians(zoom), 800.f / 600.f, 0.1f, 100.f);
-    modelLoc = glGetUniformLocation(ourShader.Id, "projection");
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, texture2);
-
-    // Update deltatime and lastFrame
-    float currentFrame = glfwGetTime();
+    // per-frame time logic
+    // --------------------
+    float currentFrame = static_cast<float>(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
-    glBindVertexArray(VAO);
-    // First parameter determine what primitive shape to draw
-    for (unsigned int i = 0; i < 10; ++i) {
-      glm::mat4 model = glm::mat4(1.0f);
+    // input
+    // -----
+    processInput(window);
+
+    // render
+    // ------
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // bind textures on corresponding texture units
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, diffuseMap);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, specularMap);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, emissionMap);
+
+    // activate shader
+    objectShader.use();
+    objectShader.SetVec3("cameraPos", camera.Position);
+
+    objectShader.SetVec3("spotLight.position", camera.Position);
+    objectShader.SetVec3("spotLight.direction", camera.Front);
+    objectShader.SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5)));
+    objectShader.SetFloat("spotLight.outerCutOff",
+                          glm::cos(glm::radians(15.0)));
+    // pass projection matrix to shader (note that in this case it could change
+    // every frame)
+    glm::mat4 projection =
+        glm::perspective(glm::radians(camera.Zoom),
+                         (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    objectShader.setMat4("projection", projection);
+
+    // camera/view transformation
+    glm::mat4 view = camera.GetViewMatrix();
+    objectShader.setMat4("view", view);
+    // Set the camera position for fragment shader
+    // render boxes
+    for (unsigned int i = 0; i < 10; i++) {
+      // calculate the model matrix for each object and pass it to shader before
+      // drawing
+      glm::mat4 model = glm::mat4(
+          1.0f); // make sure to initialize matrix to identity matrix first
       model = glm::translate(model, cubePositions[i]);
-      if (i % 3 == 0) {
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(45.f),
-                            glm::vec3(0.5f, 1.0f, 0.0f));
-      } else {
-        float angle = 20.f * i;
-        model = glm::rotate(model, glm::radians(angle),
-                            glm::vec3(1.0f, 0.3f, 0.5f));
-      }
-      ourShader.setMat4("model", model);
+      float angle = 20.0f * i;
+      // float angle = 0.0f;
+      model =
+          glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+      objectShader.setMat4("model", model);
+      glBindVertexArray(VAO);
+      glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    lightSourceShader.use();
+    for (int i = 0; i < 4; ++i) {
+
+      lightSourceShader.setMat4("projection", projection);
+      lightSourceShader.setMat4("view", view);
+      glm::mat4 model = glm::mat4(1.0f);
+      model = glm::translate(model, pointLightPositions[i]);
+      model = glm::scale(model, glm::vec3(0.2f));
+
+      lightSourceShader.setMat4("model", model);
+
+      glBindVertexArray(lightVAO);
       glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 
-    // Check if any events are triggered, call functions through
-    // callbacks i.e.
-
+    // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
+    // etc.)
+    // -------------------------------------------------------------------------------
     glfwSwapBuffers(window);
-    // the framebuffer_size_callback
     glfwPollEvents();
   }
 
-  // Terminate GLFW
-  glfwDestroyWindow(window);
+  // optional: de-allocate all resources once they've outlived their purpose:
+  // ------------------------------------------------------------------------
+  glDeleteVertexArrays(1, &VAO);
+  glDeleteVertexArrays(1, &lightVAO);
+  glDeleteBuffers(1, &VBO);
+
+  // glfw: terminate, clearing all previously allocated GLFW resources.
+  // ------------------------------------------------------------------
   glfwTerminate();
   return 0;
+}
+
+// process all input: query GLFW whether relevant keys are pressed/released this
+// frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window) {
+  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    glfwSetWindowShouldClose(window, true);
+
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    camera.ProcessKeyboard(FORWARD, deltaTime);
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    camera.ProcessKeyboard(BACKWARD, deltaTime);
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    camera.ProcessKeyboard(LEFT, deltaTime);
+  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    camera.ProcessKeyboard(RIGHT, deltaTime);
+}
+
+// glfw: whenever the window size changed (by OS or user resize) this callback
+// function executes
+// ---------------------------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
+  // make sure the viewport matches the new window dimensions; note that width
+  // and height will be significantly larger than specified on retina displays.
+  glViewport(0, 0, width, height);
+}
+
+// glfw: whenever the mouse moves, this callback is called
+// -------------------------------------------------------
+void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
+  float xpos = static_cast<float>(xposIn);
+  float ypos = static_cast<float>(yposIn);
+
+  if (firstMouse) {
+    lastX = xpos;
+    lastY = ypos;
+    firstMouse = false;
+  }
+
+  float xoffset = xpos - lastX;
+  float yoffset =
+      lastY - ypos; // reversed since y-coordinates go from bottom to top
+
+  lastX = xpos;
+  lastY = ypos;
+
+  camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+  camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
