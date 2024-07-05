@@ -35,7 +35,7 @@ struct PointLight {
     vec3 diffuse;
     vec3 specular;
   };
-#define NR_POINT_LIGHTS 4
+#define NR_POINT_LIGHTS 1
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 ViewDir);
@@ -61,8 +61,6 @@ void main(){
   vec3 viewDir = normalize(cameraPos - fragPos);
   vec3 result = CalculateDirectLight(directLight, norm, viewDir);
 
-  for (int i = 0; i < NR_POINT_LIGHTS; ++i) 
-      result += CalcPointLight(pointLights[i], norm, fragPos, viewDir);
   result += CalculateSpotLight(spotLight, norm, fragPos, viewDir);
   fragColor = vec4(result, 1.0);
 };
@@ -76,7 +74,7 @@ vec3 CalculateDirectLight(DirectLight light, vec3 normal, vec3 viewDir) {
 
     vec3 ambient = light.ambient * vec3(texture(material.diffuse, texCoord));
     vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, texCoord));
-    vec3 specular = light.specular  * spec * vec3(texture(material.specular, texCoord));
+    vec3 specular = light.specular  * spec *  vec3(texture(material.specular, texCoord));
 
     return (ambient + diffuse + specular);
   }
@@ -110,7 +108,7 @@ vec3 CalculateSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir
     float diff = max(dot(normal, lightDir), 0.0);
     // specular shading
     vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
     // spotlight intensity
 
     float theta = dot(lightDir, normalize(-light.direction)); 

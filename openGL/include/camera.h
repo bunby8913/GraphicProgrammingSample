@@ -2,9 +2,8 @@
 #define CAMERA_H
 
 #include "../include/glad/glad/glad.h"
-#include "../include/glm-1.0.1-light/glm/glm.hpp"
-#include "../include/glm-1.0.1-light/glm/gtc/matrix_transform.hpp"
-#include <iostream>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
 
 // Defines several possible options for camera movement. Used as abstraction to
 // stay away from window-system specific input methods

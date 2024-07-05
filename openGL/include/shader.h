@@ -1,11 +1,10 @@
 #ifndef SHADER_H
 #define SHADER_H
 
-#include "../include/glad/glad/glad.h"
-#include "glm-1.0.1-light/glm/ext/matrix_float4x4.hpp"
-#include "glm-1.0.1-light/glm/ext/vector_float3.hpp"
-#include "glm-1.0.1-light/glm/gtc/type_ptr.hpp"
+#include "glad/glad/glad.h"
 #include <fstream>
+#include <glm.hpp>
+#include <gtc/type_ptr.hpp>
 #include <iostream>
 #include <sstream>
 #include <string>
