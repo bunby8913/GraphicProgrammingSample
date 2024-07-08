@@ -1,23 +1,25 @@
-
-
-#include "../include/glad/glad/glad.h"
+#include "../glad/glad/glad.h"
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
 
-#include "../camera.h"
-#include "../model.h"
+#include "../include/camera.h"
+#include "../include/model.h"
+#include "ext/matrix_transform.hpp"
 #include "fwd.hpp"
-#include "trigonometric.hpp"
+#include "geometric.hpp"
 
 #include <iostream>
+#include <map>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
+unsigned int loadTexture(const char *path);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -25,8 +27,8 @@ const unsigned int SCR_HEIGHT = 600;
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
+float lastX = (float)SCR_WIDTH / 2.0;
+float lastY = (float)SCR_HEIGHT / 2.0;
 bool firstMouse = true;
 
 // timing
@@ -69,24 +71,156 @@ int main() {
     return -1;
   }
 
-  // tell stb_image.h to flip loaded texture's on the y-axis (before loading
-  // model).
-  stbi_set_flip_vertically_on_load(true);
-
   // configure global opengl state
   // -----------------------------
   glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS); // always pass the depth test (same effect as
+                        // glDisable(GL_DEPTH_TEST))
+  glEnable(GL_STENCIL_TEST);
+  glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+  glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+  // Enable blending
+  glEnable(GL_BLEND);
+  // Set for the blend function to use alpha value of the source as factor, and
+  // destination factor as 1 - source factor
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  // Enable face culling
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CW);
 
   // build and compile shaders
   // -------------------------
-  Shader objectShader("../shader/camera.vs", "../shader/camera.fs");
-  Shader lightSourceShader("../shader/light.vs", "../shader/light.fs");
+  Shader shader("../shader/depth_testing.vs", "../shader/depth_testing.fs");
+  Shader outlineShader("../shader/depth_testing.vs", "../shader/outline.fs");
 
-  // load models
-  // -----------
-  Model objectModel(std::string("../resource/3D/backpack/backpack.obj"));
-  // draw in wireframe
-  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  // set up vertex data (and buffer(s)) and configure vertex attributes
+  // ------------------------------------------------------------------
+  float cubeVertices[] = {
+      // Back face
+      0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  // bottom-right
+      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
+      -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // Bottom-left
+      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,  // top-left
+      -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // bottom-left
+      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
+      // Front face
+      0.5f, 0.5f, 0.5f, 1.0f, 1.0f,   // top-right
+      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,  // bottom-right
+      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, // bottom-left
+      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, // bottom-left
+      -0.5f, 0.5f, 0.5f, 0.0f, 1.0f,  // top-left
+      0.5f, 0.5f, 0.5f, 1.0f, 1.0f,   // top-right
+      // Left face
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // bottom-left
+      -0.5f, 0.5f, -0.5f, 1.0f, 1.0f,  // top-left
+      -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // top-right
+      -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // top-right
+      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,  // bottom-right
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // bottom-left
+                                       // Right face
+      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
+      0.5f, -0.5f, -0.5f, 0.0f, 1.0f,  // bottom-right
+      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,    // top-left
+      0.5f, -0.5f, 0.5f, 0.0f, 0.0f,   // bottom-left
+      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,    // top-left
+      0.5f, -0.5f, -0.5f, 0.0f, 1.0f,  // bottom-right
+      // Bottom face
+      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,   // bottom-left
+      0.5f, -0.5f, -0.5f, 1.0f, 1.0f,  // top-left
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // top-right
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // top-right
+      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,  // bottom-right
+      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,   // bottom-left
+      // Top face
+      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,  // top-right
+      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // bottom-right
+      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, // top-left
+      -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,  // bottom-left
+      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, // top-left
+      0.5f, 0.5f, 0.5f, 1.0f, 0.0f    // bottom-right
+  };
+  float planeVertices[] = {
+      // positions          // texture Coords (note we set these higher than 1
+      // (together with GL_REPEAT as texture wrapping mode). this will cause the
+      // floor texture to repeat)
+      -5.0f, -0.5f, -5.0f, 0.0f,  2.0f, -5.0f, -0.5f, 5.0f,
+      0.0f,  0.0f,  5.0f,  -0.5f, 5.0f, 2.0f,  0.0f,
+
+      5.0f,  -0.5f, -5.0f, 2.0f,  2.0f, -5.0f, -0.5f, -5.0f,
+      0.0f,  2.0f,  5.0f,  -0.5f, 5.0f, 2.0f,  0.0f};
+
+  float transparentVertices[] = {
+      // positions         // texture Coords (swapped y coordinates because
+      // texture is flipped upside down)
+      0.0f, 0.5f, 0.0f, 0.0f,  0.0f, 0.0f, -0.5f, 0.0f,
+      0.0f, 1.0f, 1.0f, -0.5f, 0.0f, 1.0f, 1.0f,
+
+      0.0f, 0.5f, 0.0f, 0.0f,  0.0f, 1.0f, -0.5f, 0.0f,
+      1.0f, 1.0f, 1.0f, 0.5f,  0.0f, 1.0f, 0.0f};
+  std::vector<glm::vec3> transparent;
+  transparent.push_back(glm::vec3(-1.5f, 0.0f, -0.48f));
+  transparent.push_back(glm::vec3(1.5f, 0.0f, 0.51f));
+  transparent.push_back(glm::vec3(0.0f, 0.0f, 0.7f));
+  transparent.push_back(glm::vec3(-0.3f, 0.0f, -2.3f));
+  transparent.push_back(glm::vec3(0.5f, 0.0f, -0.6f));
+
+  // cube VAO
+  unsigned int cubeVAO, cubeVBO;
+  glGenVertexArrays(1, &cubeVAO);
+  glGenBuffers(1, &cubeVBO);
+  glBindVertexArray(cubeVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices,
+               GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glBindVertexArray(0);
+
+  // plane VAO
+  unsigned int planeVAO, planeVBO;
+  glGenVertexArrays(1, &planeVAO);
+  glGenBuffers(1, &planeVBO);
+  glBindVertexArray(planeVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices,
+               GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glBindVertexArray(0);
+
+  unsigned int transparentVAO, transparentVBO;
+  glGenVertexArrays(1, &transparentVAO);
+  glGenBuffers(1, &transparentVBO);
+  glBindVertexArray(transparentVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, transparentVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(transparentVertices),
+               &transparentVertices, GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glBindVertexArray(0);
+
+  // load textures
+  // -------------
+  unsigned int cubeTexture = loadTexture("../resource/img/marble.jpg");
+  unsigned int floorTexture = loadTexture("../resource/img/metal.png");
+  unsigned int transparentWindowTexture =
+      loadTexture("../resource/img/blending_transparent_window.png");
+
+  // shader configuration
+  // --------------------
+  shader.use();
+  shader.SetInt("texture1", 0);
 
   // render loop
   // -----------
@@ -103,60 +237,88 @@ int main() {
 
     // render
     // ------
-    glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    // don't forget to enable shader before setting uniforms
-    objectShader.use();
-
-    // view/projection transformations
-
-    objectShader.SetVec3("cameraPos", camera.Position);
-
-    // set up material
-    objectShader.SetInt("material.diffuse", 0);
-    objectShader.SetInt("material.specular", 1);
-    objectShader.SetFloat("material.shininess", 32);
-
-    // Set up some ambient light
-    glm::vec3 ambient = glm::vec3(0.4f);
-    glm::vec3 diffuse = glm::vec3(0.4f, 0.4f, 0.4f);
-    glm::vec3 specular = glm::vec3(0.2f);
-    glm::vec3 direction = glm::vec3(-0.5f, -1.0f, -0.3f);
-    objectShader.SetVec3("directLight.direction", direction);
-    objectShader.SetVec3("directLight.ambient", ambient);
-    objectShader.SetVec3("directLight.diffuse", diffuse);
-    objectShader.SetVec3("directLight.specular", specular);
-    objectShader.SetVec3("spotLight.position", camera.Position);
-    objectShader.SetVec3("spotLight.direction", camera.Front);
-    objectShader.SetFloat("spotLight.cutOff", glm::cos(glm::radians(7.5f)));
-    objectShader.SetFloat("spotLight.outerCutOff",
-                          glm::cos(glm::radians(10.0f)));
-    objectShader.SetVec3("spotLight.ambient", glm::vec3(0.0f));
-    objectShader.SetVec3("spotLight.diffuse", glm::vec3(1.0f));
-    objectShader.SetVec3("spotLight.specular", glm::vec3(0.5f));
-
+    glStencilMask(0x00); // Do not update stencil buffer when drawing floor
+    glm::mat4 view = camera.GetViewMatrix();
     glm::mat4 projection =
         glm::perspective(glm::radians(camera.Zoom),
                          (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-    glm::mat4 view = camera.GetViewMatrix();
-    objectShader.setMat4("projection", projection);
-    objectShader.setMat4("view", view);
-
-    // render the loaded model
     glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(
-        model,
-        glm::vec3(
-            0.0f, 0.0f,
-            0.0f)); // translate it down so it's at the center of the scene
-    model = glm::scale(
-        model,
-        glm::vec3(1.0f, 1.0f,
-                  1.0f)); // it's a bit too big for our scene, so scale it down
-    objectShader.setMat4("model", model);
 
-    objectModel.Draw(objectShader);
+    outlineShader.use();
+    outlineShader.setMat4("view", view);
+    outlineShader.setMat4("projection", projection);
+
+    shader.use();
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+
+    // floor
+    glBindVertexArray(planeVAO);
+    glBindTexture(GL_TEXTURE_2D, floorTexture);
+    shader.setMat4("model", glm::mat4(1.0f));
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    // Enable editing stencil buffer + set every fragment to pass the test
+    // glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    // glStencilMask(0xFF);
+
+    // cubes
+    glBindVertexArray(cubeVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    shader.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    shader.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Use map to store + sort distance between camera + mirror to establish
+    // order to render correctly
+    std::map<float, glm::vec3> sorted;
+    for (unsigned int i = 0; i < transparent.size(); ++i) {
+      float distance = glm::length(camera.Position - transparent[i]);
+      sorted[distance] = transparent[i];
+    }
+
+    // draw transparent glass in scene
+    glBindVertexArray(transparentVAO);
+    glBindTexture(GL_TEXTURE_2D, transparentWindowTexture);
+    for (std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin();
+         it != sorted.rend(); ++it) {
+      model = glm::mat4(1.0f);
+      model = glm::translate(model, it->second);
+      shader.setMat4("model", model);
+      glad_glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+    glBindVertexArray(0);
+    // glStencilFunc(GL_NOTEQUAL, 1, 0XFF);
+    // glStencilMask(0x00);
+    // glDisable(GL_DEPTH_TEST);
+    // outlineShader.use();
+    //// cubes
+    // glBindVertexArray(cubeVAO);
+    // glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    // model = glm::mat4(1.0f);
+    // model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    // model = glm::scale(model, glm::vec3(1.1f));
+    // outlineShader.setMat4("model", model);
+    // glDrawArrays(GL_TRIANGLES, 0, 36);
+    // model = glm::mat4(1.0f);
+    // model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    // model = glm::scale(model, glm::vec3(1.1f));
+    // outlineShader.setMat4("model", model);
+    // glDrawArrays(GL_TRIANGLES, 0, 36);
+    // glBindVertexArray(0);
+    //// Reset stencil + depth buffer for next frame
+    // glStencilMask(0xFF);
+    // glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    // glEnable(GL_DEPTH_TEST);
 
     // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
     // etc.)
@@ -165,8 +327,13 @@ int main() {
     glfwPollEvents();
   }
 
-  // glfw: terminate, clearing all previously allocated GLFW resources.
-  // ------------------------------------------------------------------
+  // optional: de-allocate all resources once they've outlived their purpose:
+  // ------------------------------------------------------------------------
+  glDeleteVertexArrays(1, &cubeVAO);
+  glDeleteVertexArrays(1, &planeVAO);
+  glDeleteBuffers(1, &cubeVBO);
+  glDeleteBuffers(1, &planeVBO);
+
   glfwTerminate();
   return 0;
 }
@@ -223,4 +390,46 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
   camera.ProcessMouseScroll(static_cast<float>(yoffset));
+}
+
+// utility function for loading a 2D texture from file
+// ---------------------------------------------------
+unsigned int loadTexture(char const *path) {
+  unsigned int textureID;
+  glGenTextures(1, &textureID);
+
+  int width, height, nrComponents;
+  unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+  if (data) {
+    GLenum format;
+    if (nrComponents == 1)
+      format = GL_RED;
+    else if (nrComponents == 3)
+      format = GL_RGB;
+    else if (nrComponents == 4)
+      format = GL_RGBA;
+
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+                 GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                    GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    std::string stringPath = path;
+    if (stringPath.find("grass") != std::string::npos) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    stbi_image_free(data);
+  } else {
+    std::cout << "Texture failed to load at path: " << path << std::endl;
+    stbi_image_free(data);
+  }
+
+  return textureID;
 }
