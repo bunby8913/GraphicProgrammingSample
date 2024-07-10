@@ -1,7 +1,6 @@
 #include "../glad/glad/glad.h"
 #include <GLFW/glfw3.h>
 
-#include <algorithm>
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
@@ -10,10 +9,8 @@
 #include "../include/model.h"
 #include "ext/matrix_transform.hpp"
 #include "fwd.hpp"
-#include "geometric.hpp"
 
 #include <iostream>
-#include <map>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
@@ -74,97 +71,59 @@ int main() {
   // configure global opengl state
   // -----------------------------
   glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LESS); // always pass the depth test (same effect as
-                        // glDisable(GL_DEPTH_TEST))
-  glEnable(GL_STENCIL_TEST);
-  glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-  glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-
-  // Enable blending
-  glEnable(GL_BLEND);
-  // Set for the blend function to use alpha value of the source as factor, and
-  // destination factor as 1 - source factor
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  // Enable face culling
-  glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CW);
-
+  // glDisable(GL_DEPTH_TEST))
   // build and compile shaders
   // -------------------------
   Shader shader("../shader/depth_testing.vs", "../shader/depth_testing.fs");
-  Shader outlineShader("../shader/depth_testing.vs", "../shader/outline.fs");
+  Shader frameBufferShader("../shader/framebuffer.vs",
+                           "../shader/framebuffer.fs");
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
   float cubeVertices[] = {
-      // Back face
-      0.5f, -0.5f, -0.5f, 1.0f, 0.0f,  // bottom-right
-      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
-      -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // Bottom-left
-      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,  // top-left
-      -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // bottom-left
-      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
-      // Front face
-      0.5f, 0.5f, 0.5f, 1.0f, 1.0f,   // top-right
-      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,  // bottom-right
-      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, // bottom-left
-      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, // bottom-left
-      -0.5f, 0.5f, 0.5f, 0.0f, 1.0f,  // top-left
-      0.5f, 0.5f, 0.5f, 1.0f, 1.0f,   // top-right
-      // Left face
-      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // bottom-left
-      -0.5f, 0.5f, -0.5f, 1.0f, 1.0f,  // top-left
-      -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // top-right
-      -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // top-right
-      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,  // bottom-right
-      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // bottom-left
-                                       // Right face
-      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,   // top-right
-      0.5f, -0.5f, -0.5f, 0.0f, 1.0f,  // bottom-right
-      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,    // top-left
-      0.5f, -0.5f, 0.5f, 0.0f, 0.0f,   // bottom-left
-      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,    // top-left
-      0.5f, -0.5f, -0.5f, 0.0f, 1.0f,  // bottom-right
-      // Bottom face
-      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,   // bottom-left
-      0.5f, -0.5f, -0.5f, 1.0f, 1.0f,  // top-left
-      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // top-right
-      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, // top-right
-      -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,  // bottom-right
-      0.5f, -0.5f, 0.5f, 1.0f, 0.0f,   // bottom-left
-      // Top face
-      0.5f, 0.5f, -0.5f, 1.0f, 1.0f,  // top-right
-      0.5f, 0.5f, 0.5f, 1.0f, 0.0f,   // bottom-right
-      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, // top-left
-      -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,  // bottom-left
-      -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, // top-left
-      0.5f, 0.5f, 0.5f, 1.0f, 0.0f    // bottom-right
-  };
+      // positions          // texture Coords
+      -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 0.0f,
+      0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
+      -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+
+      -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
+      0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+      -0.5f, 0.5f,  0.5f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f,
+
+      -0.5f, 0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 1.0f, 1.0f,
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+      -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  1.0f, 0.0f,
+
+      0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
+      0.5f,  -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f, 1.0f,
+      0.5f,  -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+      -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 1.0f,
+      0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
+      -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+
+      -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
+      0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+      -0.5f, 0.5f,  0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f};
   float planeVertices[] = {
-      // positions          // texture Coords (note we set these higher than 1
-      // (together with GL_REPEAT as texture wrapping mode). this will cause the
-      // floor texture to repeat)
-      -5.0f, -0.5f, -5.0f, 0.0f,  2.0f, -5.0f, -0.5f, 5.0f,
-      0.0f,  0.0f,  5.0f,  -0.5f, 5.0f, 2.0f,  0.0f,
+      // positions          // texture Coords
+      5.0f, -0.5f, 5.0f,  2.0f,  0.0f,  -5.0f, -0.5f, 5.0f,
+      0.0f, 0.0f,  -5.0f, -0.5f, -5.0f, 0.0f,  2.0f,
 
-      5.0f,  -0.5f, -5.0f, 2.0f,  2.0f, -5.0f, -0.5f, -5.0f,
-      0.0f,  2.0f,  5.0f,  -0.5f, 5.0f, 2.0f,  0.0f};
+      5.0f, -0.5f, 5.0f,  2.0f,  0.0f,  -5.0f, -0.5f, -5.0f,
+      0.0f, 2.0f,  5.0f,  -0.5f, -5.0f, 2.0f,  2.0f};
+  float quadVertices[] = {// vertex attributes for a quad that fills the entire
+                          // screen in Normalized Device Coordinates.
+                          // positions   // texCoords
+                          -1.0f, 1.0f, 0.0f, 1.0f,  -1.0f, -1.0f,
+                          0.0f,  0.0f, 1.0f, -1.0f, 1.0f,  0.0f,
 
-  float transparentVertices[] = {
-      // positions         // texture Coords (swapped y coordinates because
-      // texture is flipped upside down)
-      0.0f, 0.5f, 0.0f, 0.0f,  0.0f, 0.0f, -0.5f, 0.0f,
-      0.0f, 1.0f, 1.0f, -0.5f, 0.0f, 1.0f, 1.0f,
+                          -1.0f, 1.0f, 0.0f, 1.0f,  1.0f,  -1.0f,
+                          1.0f,  0.0f, 1.0f, 1.0f,  1.0f,  1.0f};
 
-      0.0f, 0.5f, 0.0f, 0.0f,  0.0f, 1.0f, -0.5f, 0.0f,
-      1.0f, 1.0f, 1.0f, 0.5f,  0.0f, 1.0f, 0.0f};
-  std::vector<glm::vec3> transparent;
-  transparent.push_back(glm::vec3(-1.5f, 0.0f, -0.48f));
-  transparent.push_back(glm::vec3(1.5f, 0.0f, 0.51f));
-  transparent.push_back(glm::vec3(0.0f, 0.0f, 0.7f));
-  transparent.push_back(glm::vec3(-0.3f, 0.0f, -2.3f));
-  transparent.push_back(glm::vec3(0.5f, 0.0f, -0.6f));
+  float mirrorVectires[]{-0.4f, 1.0f, 0.0f, 1.0f, -0.4f, 0.8f, 0.0f, 0.0f,
+                         0.4f,  0.8f, 1.0f, 0.0f, -0.4f, 1.0f, 0.0f, 1.0f,
+                         0.4f,  0.8f, 1.0f, 0.0f, 0.4f,  1.0f, 1.0f, 1.0f};
 
   // cube VAO
   unsigned int cubeVAO, cubeVBO;
@@ -179,7 +138,6 @@ int main() {
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
                         (void *)(3 * sizeof(float)));
-  glBindVertexArray(0);
 
   // plane VAO
   unsigned int planeVAO, planeVBO;
@@ -194,33 +152,64 @@ int main() {
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
                         (void *)(3 * sizeof(float)));
-  glBindVertexArray(0);
 
-  unsigned int transparentVAO, transparentVBO;
-  glGenVertexArrays(1, &transparentVAO);
-  glGenBuffers(1, &transparentVBO);
-  glBindVertexArray(transparentVAO);
-  glBindBuffer(GL_ARRAY_BUFFER, transparentVBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(transparentVertices),
-               &transparentVertices, GL_STATIC_DRAW);
+  unsigned int framebufferVAO, framebufferVBO;
+  glGenVertexArrays(1, &framebufferVAO);
+  glGenBuffers(1, &framebufferVBO);
+  glBindVertexArray(framebufferVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, framebufferVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(mirrorVectires), &mirrorVectires,
+               GL_STATIC_DRAW);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                        (void *)(3 * sizeof(float)));
-  glBindVertexArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
 
-  // load textures
-  // -------------
-  unsigned int cubeTexture = loadTexture("../resource/img/marble.jpg");
+  //  -------------------------
+  //   load textures
+  //
+  //   -------------
+  unsigned int cubeTexture = loadTexture("../resource/img/container.jpg");
   unsigned int floorTexture = loadTexture("../resource/img/metal.png");
-  unsigned int transparentWindowTexture =
-      loadTexture("../resource/img/blending_transparent_window.png");
 
   // shader configuration
   // --------------------
   shader.use();
   shader.SetInt("texture1", 0);
+
+  frameBufferShader.use();
+  frameBufferShader.SetInt("screenTexture", 0);
+  // Create custom frame buffers
+  unsigned int framebuffer;
+  glGenFramebuffers(1, &framebuffer);
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  // Generate a color attachment to the custom frame buffer
+  unsigned int textureColorbuffer;
+  glGenTextures(1, &textureColorbuffer);
+  glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE,
+               NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  // Attach the color attachment to the custom frame buffer
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         textureColorbuffer, 0);
+  // Create a renderable object to store data for depth +
+  // stencil testing
+  unsigned int rbo;
+  glGenRenderbuffers(1, &rbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, 800, 600);
+
+  // unbind the render buffer
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                            GL_RENDERBUFFER, rbo);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    std::cout << "ERROR with framebuffer" << std::endl;
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
   // render loop
   // -----------
@@ -237,23 +226,35 @@ int main() {
 
     // render
     // ------
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glEnable(GL_DEPTH_TEST);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glStencilMask(0x00); // Do not update stencil buffer when drawing floor
+    shader.use();
+    glm::mat4 model = glm::mat4(1.0f);
+    camera.Yaw += 180.f;
+    camera.ProcessMouseMovement(0, 0, false);
     glm::mat4 view = camera.GetViewMatrix();
+    camera.Yaw -= 180.f;
+    camera.ProcessMouseMovement(0, 0, true);
     glm::mat4 projection =
         glm::perspective(glm::radians(camera.Zoom),
                          (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-    glm::mat4 model = glm::mat4(1.0f);
-
-    outlineShader.use();
-    outlineShader.setMat4("view", view);
-    outlineShader.setMat4("projection", projection);
-
-    shader.use();
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
+    // cubes
+    glBindVertexArray(cubeVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    shader.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    shader.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
 
     // floor
     glBindVertexArray(planeVAO);
@@ -262,10 +263,22 @@ int main() {
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
-    // Enable editing stencil buffer + set every fragment to pass the test
-    // glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    // glStencilMask(0xFF);
+    // second pass
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // glDisable(GL_DEPTH_TEST);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    frameBufferShader.use();
+    glBindVertexArray(framebufferVAO);
+    glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    shader.use();
+    model = glm::mat4(1.0f);
+    view = camera.GetViewMatrix();
+    shader.setMat4("view", view);
     // cubes
     glBindVertexArray(cubeVAO);
     glActiveTexture(GL_TEXTURE0);
@@ -278,56 +291,22 @@ int main() {
     shader.setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
-    // Use map to store + sort distance between camera + mirror to establish
-    // order to render correctly
-    std::map<float, glm::vec3> sorted;
-    for (unsigned int i = 0; i < transparent.size(); ++i) {
-      float distance = glm::length(camera.Position - transparent[i]);
-      sorted[distance] = transparent[i];
-    }
-
-    // draw transparent glass in scene
-    glBindVertexArray(transparentVAO);
-    glBindTexture(GL_TEXTURE_2D, transparentWindowTexture);
-    for (std::map<float, glm::vec3>::reverse_iterator it = sorted.rbegin();
-         it != sorted.rend(); ++it) {
-      model = glm::mat4(1.0f);
-      model = glm::translate(model, it->second);
-      shader.setMat4("model", model);
-      glad_glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    // floor
+    glBindVertexArray(planeVAO);
+    glBindTexture(GL_TEXTURE_2D, floorTexture);
+    shader.setMat4("model", glm::mat4(1.0f));
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
-    // glStencilFunc(GL_NOTEQUAL, 1, 0XFF);
-    // glStencilMask(0x00);
-    // glDisable(GL_DEPTH_TEST);
-    // outlineShader.use();
-    //// cubes
-    // glBindVertexArray(cubeVAO);
-    // glBindTexture(GL_TEXTURE_2D, cubeTexture);
-    // model = glm::mat4(1.0f);
-    // model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-    // model = glm::scale(model, glm::vec3(1.1f));
-    // outlineShader.setMat4("model", model);
-    // glDrawArrays(GL_TRIANGLES, 0, 36);
-    // model = glm::mat4(1.0f);
-    // model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-    // model = glm::scale(model, glm::vec3(1.1f));
-    // outlineShader.setMat4("model", model);
-    // glDrawArrays(GL_TRIANGLES, 0, 36);
-    // glBindVertexArray(0);
-    //// Reset stencil + depth buffer for next frame
-    // glStencilMask(0xFF);
-    // glStencilFunc(GL_ALWAYS, 0, 0xFF);
-    // glEnable(GL_DEPTH_TEST);
 
-    // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
-    // etc.)
+    // glfw: swap buffers and poll IO events (keys
+    // pressed/released, mouse moved etc.)
     // -------------------------------------------------------------------------------
     glfwSwapBuffers(window);
     glfwPollEvents();
   }
 
-  // optional: de-allocate all resources once they've outlived their purpose:
+  // optional: de-allocate all resources once they've
+  // outlived their purpose:
   // ------------------------------------------------------------------------
   glDeleteVertexArrays(1, &cubeVAO);
   glDeleteVertexArrays(1, &planeVAO);
