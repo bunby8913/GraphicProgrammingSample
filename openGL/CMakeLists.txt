@@ -27,3 +27,4 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/glad.c")
 add_executable(${PROJECT_NAME} ${SOURCES})
 # Link libraries
 target_link_libraries(${PROJECT_NAME} glfw3 ${OPENGL_LIBRARIES} ${CMAKE_SOURCE_DIR}/../assimp/bin/libassimp.so X11 pthread Xrandr Xi dl)
+include_directories(${CMAKE_SOURCE_DIR}/..)
